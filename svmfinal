@@ -1,0 +1,116 @@
+ПРИЛОЖЕНИЕ В. Код реализуемых алгоритмов.
+import numpy as np # linear algebra
+import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv), data manipulation as in SQL
+import matplotlib.pyplot as plt # this is used for the plot the graph
+import seaborn as sns # used for plot interactive graph. I like it most for plot
+from sklearn import preprocessing
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import recall_score
+from sklearn.metrics import precision_score
+%matplotlib inline
+plt.style.use('ggplot')
+sns.set(style='darkgrid')
+data = pd.read_csv("C:\Program Files (x86)\JetBrains\data.csv",header=0)
+new_columns = data.columns.values
+new_columns[18] = 'concavepoints_worst'
+data.columns = new_columns
+data=data.drop('Unnamed: 32',1) #удаляем столбец без данных
+data=data.drop('id',1)
+data['diagnosis']=data['diagnosis'].map({'M':1,'B':0}) #векторизируем категориальные признаки
+
+tmp=np.log(data.radius_worst*data.area_worst)
+data['Volume'] = tmp.values #объем
+tmp = np.log(data.concavepoints_worst*data.concavity_worst*data.compactness_worst+1)
+data['Concave'] = tmp.values #вогнутость
+tmp = -np.log(data.fractal_dimension_worst*data.symmetry_worst/np.log(data.radius_mean*data.area_mean))
+data['MaxVol'] = tmp.values #максимальный объем
+tmp = np.log(data.radius_worst*data.perimeter_worst*data.concavepoints_worst+1)
+data['SinVol'] = tmp.values #синтетический объем
+new_data = pd.DataFrame(preprocessing.scale(data.iloc[:,2:36]))
+new_data.columns = list(data.iloc[:,2:36].columns)
+new_data['diagnosis'] = data['diagnosis']
+numerical_columns = [c for c in data.columns if data[c].dtype.name != 'object'] #нормировка
+data_numerical = data[numerical_columns]
+data_numerical = (data_numerical - data_numerical.mean()) / data_numerical.std()
+data_numerical.describe()
+#print(categorical_columns)
+print(numerical_columns)
+matrix = pd.melt(new_data, "diagnosis", var_name="properties")
+fig, ax = plt.subplots(figsize=(10,10))
+p = sns.violinplot(ax = ax, x="properties", y="value", hue="diagnosis", split = True, data=matrix, inner = 'quartile', palette = 'Set1')
+p.set_xticklabels(rotation = 90, labels = list(new_data.columns))
+plt.show()
+X = data.drop(('diagnosis'), axis=1)  # Выбрасываем столбец 'diagnosis'.
+y = data['diagnosis']
+feature_names = X.columns
+print(feature_names)
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.3, random_state = 42)
+from sklearn.neighbors import KNeighborsClassifier #работаем с kNN
+knn = KNeighborsClassifier()
+knn.fit(X_train, y_train)
+y_train_predict = knn.predict(X_train)
+y_test_predict = knn.predict(X_test)
+
+err_train = np.mean(y_train != y_train_predict)
+err_test  = np.mean(y_test  != y_test_predict)
+print (err_train, err_test) #оцениваем алгоритм
+from sklearn.grid_search import GridSearchCV
+n_neighbors_array = [1, 3, 4, 5, 7, 8, 10, 15,30,50, 51] #подбираем оптимальное значение
+knn = KNeighborsClassifier()
+grid = GridSearchCV(knn, param_grid={'n_neighbors': n_neighbors_array})
+grid.fit(X_train, y_train)
+
+best_cv_err = 1 - grid.best_score_
+best_n_neighbors = grid.best_estimator_.n_neighbors
+print (best_cv_err, best_n_neighbors)
+knn = KNeighborsClassifier(n_neighbors=best_n_neighbors)
+knn.fit(X_train, y_train)
+
+err_train = np.mean(y_train != knn.predict(X_train))
+err_test  = np.mean(y_test  != knn.predict(X_test))
+print (err_train, err_test)
+weighted_prediction = knn.predict(X_test)
+
+print ('Accuracy:', accuracy_score(y_test, weighted_prediction)) #оцениваем алгоритм
+print ('Recall:', recall_score(y_test, weighted_prediction,
+                              average='weighted'))
+print ('Precision:', precision_score(y_test, weighted_prediction,
+                                    average='weighted'))
+from sklearn.svm import SVC #работаем с SVC
+svc = SVC()
+svc.fit(X_train, y_train)
+
+err_train = np.mean(y_train != svc.predict(X_train))
+err_test  = np.mean(y_test  != svc.predict(X_test))
+print(err_train, err_test) #оцениваем алгоритм
+weighted_prediction = svc.predict(X_test)
+
+print ('Accuracy:', accuracy_score(y_test, weighted_prediction))
+print ('Recall:', recall_score(y_test, weighted_prediction,
+                              average='weighted'))
+print ('Precision:', precision_score(y_test, weighted_prediction,
+                                    average='weighted'))
+from sklearn.grid_search import GridSearchCV
+C_array = np.logspace(-3, 3, num=7)
+gamma_array = np.logspace(-5, 2, num=8)
+svc = SVC(kernel='rbf') #рассматриваем SVC с дополнительным подбором параметров
+grid = GridSearchCV(svc, param_grid={'C': C_array, 'gamma': gamma_array})
+grid.fit(X_train, y_train)
+print ('CV error    = ', 1 - grid.best_score_)
+print ('best C      = ', grid.best_estimator_.C)
+print ('best gamma  = ', grid.best_estimator_.gamma)
+svc = SVC(kernel='rbf', C=grid.best_estimator_.C, gamma=grid.best_estimator_.gamma)
+svc.fit(X_train, y_train)
+
+err_train = np.mean(y_train != svc.predict(X_train))
+err_test  = np.mean(y_test  != svc.predict(X_test))
+print (err_train, err_test)
+weighted_prediction = svc.predict(X_test)
+
+print ('Accuracy:', accuracy_score(y_test, weighted_prediction)) #оцениваем алгоритм
+print ('Recall:', recall_score(y_test, weighted_prediction,
+                              average='weighted'))
+print ('Precision:', precision_score(y_test, weighted_prediction,
+                                    average='weighted'))
+
